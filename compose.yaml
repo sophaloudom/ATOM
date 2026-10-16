@@ -1,0 +1,76 @@
+name: atom-test
+x-app: &app
+  build: .
+  image: atom-web:test
+  environment: &app-env
+    DATABASE_URL: postgresql://atom:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/atom
+    DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY}
+    DJANGO_DEBUG: "0"
+    DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+    CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+    DJANGO_SECURE_COOKIES: "1"
+    EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+    EMAIL_HOST: ${EMAIL_HOST:-}
+    EMAIL_PORT: ${EMAIL_PORT:-587}
+    EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+    EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+    DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-alerts@localhost}
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: atom
+      POSTGRES_USER: atom
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atom -d atom"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  setup:
+    <<: *app
+    restart: "no"
+    environment:
+      <<: *app-env
+      SEED_DEMO: ${SEED_DEMO:-0}
+    command: ["sh", "-ec", "python manage.py migrate --noinput; if [ \"$$SEED_DEMO\" = 1 ]; then python manage.py seed_demo; fi"]
+    depends_on:
+      db:
+        condition: service_healthy
+  web:
+    <<: *app
+    command: ["sh", "-ec", "python manage.py collectstatic --noinput; exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 30 --access-logfile - --error-logfile -"]
+    expose: ["8000"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+  worker:
+    <<: *app
+    command: ["python", "-u", "manage.py", "run_alert_worker"]
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+volumes:
+  postgres_data:

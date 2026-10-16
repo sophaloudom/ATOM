@@ -1,0 +1,30 @@
+# Public test hosting with automatically managed HTTPS. Requires a real domain.
+services:
+  web:
+    environment:
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,${SITE_DOMAIN:?Set SITE_DOMAIN}
+      CSRF_TRUSTED_ORIGINS: https://${SITE_DOMAIN:?Set SITE_DOMAIN}
+      DJANGO_TRUST_PROXY: "1"
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  caddy_data:
+  caddy_config:

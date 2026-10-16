@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+db.sqlite3
+staticfiles/
+*.log
+
+.local-db.env
+
+deploy/*.env
+backups/
+
+deploy/wheels/*.whl

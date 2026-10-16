@@ -1,0 +1,10 @@
+# Local/private HTTP testing. Public hosting should use compose.host.yaml instead.
+services:
+  web:
+    ports:
+      - "${TEST_BIND:-127.0.0.1}:${TEST_PORT:-8080}:8000"
+    environment:
+      DJANGO_SECURE_COOKIES: "0"
+  setup:
+    environment:
+      SEED_DEMO: ${SEED_DEMO:-1}
